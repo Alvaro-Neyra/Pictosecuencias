@@ -1,0 +1,10 @@
+[project]
+name = "pictosecuencias"
+version = "0.1.0"
+description = "Juego de mesa interactivo asistido por IA para personas con discapacidad intelectual (Asociación Educativa Kallpa)"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "pygame>=2.6.0",
+    "pyttsx3>=2.90",
+]

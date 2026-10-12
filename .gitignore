@@ -1,0 +1,32 @@
+# Entornos virtuales
+.venv/
+venv/
+ENV/
+env/
+
+# Bytecode y caches de Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.mypy_cache/
+
+# Distribución y empaquetado
+dist/
+build/
+*.egg-info/
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Configuraciones de IDEs y editores
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Archivos específicos descartados del repositorio
+especificacion_audio.md

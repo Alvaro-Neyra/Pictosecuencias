@@ -11,6 +11,15 @@ from configuracion import (
     ruta_carpeta_audio,
 )
 from datos import catalogo_escenarios, catalogo_audios_interfaz
+from ia_models.agente_qlearning import AgenteQLearning
+from ia_models.baseline_heuristico import BaselineHeuristico
+from ia_models.entorno_simulacion import (
+    ACCION_ESPERAR,
+    ACCION_PISTA_NIVEL_1,
+    ACCION_PISTA_NIVEL_2,
+    ACCION_PISTA_NIVEL_3,
+    SEGUNDOS_UMBRAL_INACTIVIDAD,
+)
 
 
 # clase encargada de la carga y reproduccion de audio con pygame mixer
@@ -88,6 +97,18 @@ class logica_juego:
         self.mostrar_pista_adaptativa = False
         self.datos_pista_actual = None
 
+        # integracion de modelos de razonamiento (Hito 2)
+        self.modo_agente = "qlearning"
+        self.agente_qlearning = AgenteQLearning()
+        ruta_modelo_q = os.path.join(os.path.dirname(__file__), "ia_models", "modelo_q_entrenado.json")
+        self.agente_qlearning.cargar_modelo(ruta_modelo_q)
+        self.agente_baseline = BaselineHeuristico()
+
+        # variables de estado adaptativo
+        self.intentos_fallidos_casilla = 0
+        self.nivel_pista_actual = 0
+        self.tarjeta_distractora_bloqueada = None
+
     def obtener_escenario_activo(self):
         # obtencion del escenario especifico en juego segun el indice
         conjunto = catalogo_escenarios[self.clave_tematica_actual]
@@ -157,15 +178,76 @@ class logica_juego:
         self.tiempo_ultima_interaccion = time.time()
         self.mostrar_pista_adaptativa = False
         self.datos_pista_actual = None
+        self.intentos_fallidos_casilla = 0
+        self.nivel_pista_actual = 0
+        self.tarjeta_distractora_bloqueada = None
 
-    def activar_pista(self, indice_casilla):
-        # presentacion de pista adaptativa multimodal con reproduccion de pregunta
-        escenario = self.obtener_escenario_activo()
-        pista = escenario["pistas"][indice_casilla]
-        self.datos_pista_actual = pista
+    def alternar_modo_agente(self):
+        # cambia entre qlearning y baseline para sustentacion comparativa
+        self.modo_agente = "baseline" if self.modo_agente == "qlearning" else "qlearning"
+        return self.modo_agente
+
+    def obtener_estado_discreto(self):
+        # construccion de la tupla (casilla, fallos, nivel_pista, inactividad)
+        casilla_activa = min(self.indice_casilla_activa, 2)
+        fallos = min(self.intentos_fallidos_casilla, 3)
+        pista = self.nivel_pista_actual
+        inactividad = 1 if (time.time() - self.tiempo_ultima_interaccion) >= SEGUNDOS_UMBRAL_INACTIVIDAD else 0
+        return (casilla_activa, fallos, pista, inactividad)
+
+    def consultar_accion_tutor(self, es_solicitud_manual=False):
+        # consulta la politica optima del modelo activo
+        estado = self.obtener_estado_discreto()
+        if self.modo_agente == "baseline":
+            accion = self.agente_baseline.seleccionar_accion(estado)
+        else:
+            accion = self.agente_qlearning.seleccionar_accion(estado, en_entrenamiento=False)
+
+        # si es solicitud manual con boton ?, garantizar respuesta minima Nivel 1
+        if es_solicitud_manual and accion == ACCION_ESPERAR:
+            accion = ACCION_PISTA_NIVEL_1
+        return accion
+
+    def aplicar_intervencion_pedagogica(self, accion):
+        # ejecuta la accion pedagógica determinada por el agente inteligente
+        if accion == ACCION_ESPERAR:
+            return False
+
+        self.nivel_pista_actual = accion
         self.mostrar_pista_adaptativa = True
         self.tiempo_ultima_interaccion = time.time()
+
+        escenario = self.obtener_escenario_activo()
+        casilla = min(self.indice_casilla_activa, 2)
+        pista = escenario["pistas"][casilla]
+        self.datos_pista_actual = pista
+
+        if accion == ACCION_PISTA_NIVEL_3:
+            self.identificar_tarjeta_distractora()
+        else:
+            self.tarjeta_distractora_bloqueada = None
+
         self.audio_motor.reproducir("pistas", pista["audio_pregunta"])
+        return True
+
+    def identificar_tarjeta_distractora(self):
+        # localiza un distractor para atenuar carga cognitiva en Nivel 3
+        escenario = self.obtener_escenario_activo()
+        casilla = min(self.indice_casilla_activa, 2)
+        id_objetivo = escenario["objetivo"][casilla]["id"]
+        for indice, opcion in enumerate(self.opciones_disponibles):
+            if not opcion.get("usada", False) and opcion["id"] != id_objetivo:
+                self.tarjeta_distractora_bloqueada = indice
+                return
+
+    def solicitar_ayuda_manual(self):
+        # atencion inmediata y adaptativa a la pulsacion del boton ?
+        accion = self.consultar_accion_tutor(es_solicitud_manual=True)
+        self.aplicar_intervencion_pedagogica(accion)
+
+    def activar_pista(self, indice_casilla):
+        # presentacion tradicional mantenida por compatibilidad
+        self.solicitar_ayuda_manual()
 
     def cerrar_pista(self):
         # ocultar la ventana modal de pista
@@ -194,7 +276,9 @@ class logica_juego:
 
         # si se intenta colocar en una casilla distinta a la activa actual
         if casilla_destino != self.indice_casilla_activa:
-            self.activar_pista(self.indice_casilla_activa)
+            self.intentos_fallidos_casilla += 1
+            accion = self.consultar_accion_tutor(es_solicitud_manual=False)
+            self.aplicar_intervencion_pedagogica(accion)
             return False
 
         escenario = self.obtener_escenario_activo()
@@ -205,13 +289,18 @@ class logica_juego:
             self.casillas_colocadas[self.indice_casilla_activa] = opcion_elegida
             opcion_elegida["usada"] = True
             self.indice_casilla_activa += 1
+            self.intentos_fallidos_casilla = 0
+            self.nivel_pista_actual = 0
+            self.tarjeta_distractora_bloqueada = None
 
             if self.indice_casilla_activa >= 3:
                 self.cambiar_estado(estado_victoria)
             return True
         else:
-            # error detectado activacion de pista adaptativa contextual
-            self.activar_pista(self.indice_casilla_activa)
+            # error detectado consulta y ejecucion del agente adaptativo
+            self.intentos_fallidos_casilla += 1
+            accion = self.consultar_accion_tutor(es_solicitud_manual=False)
+            self.aplicar_intervencion_pedagogica(accion)
             return False
 
     def seleccionar_opcion(self, indice_opcion):
@@ -252,11 +341,12 @@ class logica_juego:
         self.cambiar_estado(estado_inicio)
 
     def actualizar_inactividad(self):
-        # revision de tiempo sin respuesta durante el juego activo
+        # revision de tiempo sin respuesta asistida por el tutor inteligente
         if self.estado_actual == estado_juego and not self.mostrar_pista_adaptativa:
             segundos_transcurridos = time.time() - self.tiempo_ultima_interaccion
-            if segundos_transcurridos > (self.segundos_espera_ayuda * 2.5):
-                self.activar_pista(self.indice_casilla_activa)
+            if segundos_transcurridos >= SEGUNDOS_UMBRAL_INACTIVIDAD:
+                accion = self.consultar_accion_tutor(es_solicitud_manual=False)
+                self.aplicar_intervencion_pedagogica(accion)
 
     def obtener_tiempo_inactividad(self):
         # calculo de segundos transcurridos desde el ultimo clic

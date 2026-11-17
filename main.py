@@ -144,6 +144,8 @@ class juego_principal:
                         self.logica.cerrar_pista()
                     else:
                         self.logica.reiniciar_juego()
+                elif evento.key == pygame.K_m:
+                    self.logica.alternar_modo_agente()
 
             if evento.type == pygame.MOUSEMOTION:
                 if self.indice_tarjeta_arrastrada is not None:
@@ -164,6 +166,8 @@ class juego_principal:
                             if indice < len(self.logica.opciones_disponibles):
                                 opcion = self.logica.opciones_disponibles[indice]
                                 if not opcion.get("usada", False) and rectangulo.collidepoint(evento.pos):
+                                    if indice == getattr(self.logica, "tarjeta_distractora_bloqueada", None):
+                                        continue
                                     self.indice_tarjeta_arrastrada = indice
                                     self.posicion_arrastre = evento.pos
                                     self.posicion_inicio_arrastre = evento.pos
@@ -236,8 +240,9 @@ class juego_principal:
                     if indice < len(self.logica.opciones_disponibles):
                         opcion = self.logica.opciones_disponibles[indice]
                         if not opcion.get("usada", False) and rectangulo.collidepoint(posicion_raton):
-                            hay_interaccion = True
-                            break
+                            if indice != getattr(self.logica, "tarjeta_distractora_bloqueada", None):
+                                hay_interaccion = True
+                                break
 
         elif self.logica.estado_actual == estado_victoria:
             self.boton_siguiente_turno.actualizar_resaltado(posicion_raton)
@@ -292,12 +297,14 @@ class juego_principal:
 
             # boton de ayuda manual
             if self.boton_ayuda.es_clic(posicion_raton):
-                self.logica.activar_pista(self.logica.indice_casilla_activa)
+                self.logica.solicitar_ayuda_manual()
                 return
 
             # seleccion en bandeja inferior
             for indice, rectangulo in enumerate(self.rectangulos_opciones):
                 if rectangulo.collidepoint(posicion_raton):
+                    if indice == getattr(self.logica, "tarjeta_distractora_bloqueada", None):
+                        return
                     self.logica.seleccionar_opcion(indice)
                     return
 

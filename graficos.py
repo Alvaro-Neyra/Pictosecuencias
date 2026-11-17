@@ -419,6 +419,18 @@ def dibujar_pantalla_juego(superficie, logica, lista_rectangulos_casillas, lista
     superficie_instruccion = fuente_instruccion.render(texto_instruccion, True, color_texto_secundario)
     superficie.blit(superficie_instruccion, (60, 68))
 
+    # badge de estado del tutor inteligente (Hito 2)
+    es_qlearning = getattr(logica, "modo_agente", "qlearning") == "qlearning"
+    modo_nombre = "Tutor IA: Q-Learning Adaptativo" if es_qlearning else "Tutor IA: Baseline Heurístico"
+    color_badge_fondo = (240, 253, 244) if es_qlearning else (241, 245, 249)
+    color_badge_texto = color_exito if es_qlearning else color_primario
+    rect_badge = pygame.Rect(ancho_pantalla - 460, 28, 290, 44)
+    pygame.draw.rect(superficie, color_badge_fondo, rect_badge, border_radius=10)
+    pygame.draw.rect(superficie, color_badge_texto, rect_badge, width=2, border_radius=10)
+    fuente_badge = pygame.font.SysFont(fuente_sistema, 15, bold=True)
+    surf_badge = fuente_badge.render(modo_nombre, True, color_badge_texto)
+    superficie.blit(surf_badge, surf_badge.get_rect(center=rect_badge.center))
+
     # boton superior de altavoz para repetir locucion
     boton_altavoz.dibujar(superficie)
 
@@ -503,6 +515,21 @@ def dibujar_pantalla_juego(superficie, logica, lista_rectangulos_casillas, lista
                 # espacio base tenue mientras se arrastra la tarjeta
                 pygame.draw.rect(superficie, (241, 245, 249), rectangulo, border_radius=14)
                 pygame.draw.rect(superficie, (203, 213, 225), rectangulo, width=2, border_radius=14)
+            elif indice == getattr(logica, "tarjeta_distractora_bloqueada", None):
+                # tarjeta distractora atenuada por intervencion pedagogica Nivel 3
+                superficie_tarjeta = obtener_superficie_pictograma(
+                    opcion["archivo"],
+                    opcion["etiqueta"],
+                    (rectangulo.width, rectangulo.height)
+                )
+                superficie.blit(superficie_tarjeta, rectangulo)
+                capa_atenuada = pygame.Surface((rectangulo.width, rectangulo.height), pygame.SRCALPHA)
+                capa_atenuada.fill((241, 245, 249, 205))
+                superficie.blit(capa_atenuada, rectangulo.topleft)
+                pygame.draw.rect(superficie, (148, 163, 184), rectangulo, width=2, border_radius=14)
+                fuente_bloqueo = pygame.font.SysFont(fuente_sistema, 12, bold=True)
+                surf_bloqueo = fuente_bloqueo.render("ATENUADA (IA)", True, (100, 116, 139))
+                superficie.blit(surf_bloqueo, surf_bloqueo.get_rect(center=(rectangulo.centerx, rectangulo.bottom - 16)))
             else:
                 # tarjeta lista para ser seleccionada o arrastrada
                 superficie_tarjeta = obtener_superficie_pictograma(
@@ -552,7 +579,7 @@ def dibujar_pantalla_juego(superficie, logica, lista_rectangulos_casillas, lista
             pygame.draw.rect(superficie, color_primario, rect_tarjeta, width=4, border_radius=14)
 
 
-# renderizado de la ventana modal de pista adaptativa sin emojis
+# renderizado de la ventana modal de pista adaptativa multimodal (Hito 2)
 def dibujar_pista_adaptativa(superficie, logica, boton_cerrar_pista):
     # capa oscura de fondo con transparencia
     superficie_oscura = pygame.Surface((ancho_pantalla, alto_pantalla), pygame.SRCALPHA)
@@ -565,26 +592,56 @@ def dibujar_pista_adaptativa(superficie, logica, boton_cerrar_pista):
     pygame.draw.rect(superficie, color_superficie, rectangulo_modal, border_radius=20)
     pygame.draw.rect(superficie, color_borde, rectangulo_modal, width=4, border_radius=20)
 
-    # cabecera de la pista del tutor sin emojis
-    fuente_cabecera = pygame.font.SysFont(fuente_sistema, 24, bold=True)
-    superficie_cabecera = fuente_cabecera.render("PISTA", True, color_ayuda)
+    # determinacion del nivel pedagogico emitido por el agente
+    nivel = getattr(logica, "nivel_pista_actual", 2)
+    if nivel == 1:
+        texto_cabecera = "PISTA NIVEL 1: ORIENTACIÓN VERBAL"
+        color_cabecera = color_primario
+    elif nivel == 3:
+        texto_cabecera = "PISTA NIVEL 3: REDUCCIÓN COGNITIVA"
+        color_cabecera = color_ayuda
+    else:
+        texto_cabecera = "PISTA NIVEL 2: APOYO VISUAL CAA"
+        color_cabecera = color_ayuda
+
+    fuente_cabecera = pygame.font.SysFont(fuente_sistema, 22, bold=True)
+    superficie_cabecera = fuente_cabecera.render(texto_cabecera, True, color_cabecera)
     superficie.blit(superficie_cabecera, superficie_cabecera.get_rect(center=(rectangulo_modal.centerx, rectangulo_modal.top + 45)))
 
-    # pregunta y pictograma de ayuda
+    # contenido contextual de la pista
     if logica.datos_pista_actual:
         pregunta = logica.datos_pista_actual["pregunta"]
         fuente_pregunta = pygame.font.SysFont(fuente_sistema, 26, bold=True)
         superficie_pregunta = fuente_pregunta.render(pregunta, True, color_texto)
-        superficie.blit(superficie_pregunta, superficie_pregunta.get_rect(center=(rectangulo_modal.centerx, rectangulo_modal.top + 105)))
 
-        # renderizado del pictograma de ayuda con fondo blanco garantizado
-        superficie_ayuda = obtener_superficie_pictograma(
-            logica.datos_pista_actual["archivo_ayuda"],
-            logica.datos_pista_actual["etiqueta_ayuda"],
-            dimensiones=(200, 195)
-        )
-        rectangulo_ayuda = superficie_ayuda.get_rect(center=(rectangulo_modal.centerx, rectangulo_modal.top + 235))
-        superficie.blit(superficie_ayuda, rectangulo_ayuda)
+        if nivel == 1:
+            # nivel 1: solo pregunta orientadora y guia auditiva (pictograma auxiliar oculto)
+            superficie.blit(superficie_pregunta, superficie_pregunta.get_rect(center=(rectangulo_modal.centerx, rectangulo_modal.top + 160)))
+
+            rect_caja_audio = pygame.Rect(rectangulo_modal.centerx - 220, rectangulo_modal.top + 220, 440, 70)
+            pygame.draw.rect(superficie, (241, 245, 249), rect_caja_audio, border_radius=14)
+            pygame.draw.rect(superficie, color_borde_claro, rect_caja_audio, width=2, border_radius=14)
+
+            fuente_guia = pygame.font.SysFont(fuente_sistema, 17, italic=True)
+            surf_guia = fuente_guia.render("Escucha atentamente la pregunta y piensa en la respuesta.", True, color_texto_secundario)
+            superficie.blit(surf_guia, surf_guia.get_rect(center=rect_caja_audio.center))
+        else:
+            # nivel 2 y 3: pregunta textual + pictograma universal auxiliar de apoyo
+            superficie.blit(superficie_pregunta, superficie_pregunta.get_rect(center=(rectangulo_modal.centerx, rectangulo_modal.top + 95)))
+
+            superficie_ayuda = obtener_superficie_pictograma(
+                logica.datos_pista_actual["archivo_ayuda"],
+                logica.datos_pista_actual["etiqueta_ayuda"],
+                dimensiones=(190, 185)
+            )
+            rectangulo_ayuda = superficie_ayuda.get_rect(center=(rectangulo_modal.centerx, rectangulo_modal.top + 215))
+            superficie.blit(superficie_ayuda, rectangulo_ayuda)
+
+            # en nivel 3, aviso explicativo de distractor atenuado
+            if nivel == 3:
+                fuente_aviso_n3 = pygame.font.SysFont(fuente_sistema, 15, bold=True)
+                surf_aviso_n3 = fuente_aviso_n3.render("¡Se atenuó 1 opción distractora en la bandeja para facilitarte la elección!", True, color_exito)
+                superficie.blit(surf_aviso_n3, surf_aviso_n3.get_rect(center=(rectangulo_modal.centerx, rectangulo_modal.top + 335)))
 
     # boton de entendido para cerrar el apoyo
     boton_cerrar_pista.rectangulo.center = (rectangulo_modal.centerx, rectangulo_modal.bottom - 45)
